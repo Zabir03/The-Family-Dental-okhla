@@ -1,6 +1,3 @@
-
-
-
 (function(){
   "use strict";
 
@@ -8,8 +5,13 @@
      FORM_ENDPOINT: paste your form service URL here (Formspree, Web3Forms,
      Google Apps Script, or your own PHP/Node handler).
      While it is empty the form runs in DEMO mode: nothing is sent anywhere.
+
+     WHATSAPP_NUMBER: clinic's WhatsApp number in international format,
+     digits only (no +, spaces or dashes). Every appointment request is
+     sent here as a formatted WhatsApp message, regardless of FORM_ENDPOINT.
   ---------------------------------------------------------------------- */
   var FORM_ENDPOINT = "";
+  var WHATSAPP_NUMBER = "917982697125";
 
   var TZ = "Asia/Kolkata";
   /* 0 = Sunday. Times in minutes from midnight. */
@@ -83,7 +85,7 @@
   });
   nav.addEventListener("click", function(e){ if(e.target.closest("a")) closeMenu() });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeMenu() });
-  window.addEventListener("resize", function(){ if(window.innerWidth >= 1000) closeMenu() });
+  window.addEventListener("resize", function(){ if(window.innerWidth >= 1180) closeMenu() });
 
   var links = $$(".nav__link");
   if("IntersectionObserver" in window){
@@ -173,6 +175,35 @@
     return ok;
   }
 
+  /* ---------- WhatsApp: format the request and open a prefilled chat ---- */
+  function prettyDate(iso){
+    if(!iso) return "";
+    var d = new Date(iso+"T00:00:00");
+    if(isNaN(d)) return iso;
+    return d.toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short",year:"numeric"});
+  }
+  function buildWhatsAppMessage(payload){
+    var lines = [
+      "*New Appointment Request*",
+      "_The Family Dental, Okhla_",
+      "",
+      "*Name:* "+payload.name,
+      "*Phone:* "+payload.phone
+    ];
+    if(payload.email) lines.push("*Email:* "+payload.email);
+    lines.push("*Preferred Date:* "+prettyDate(payload.date));
+    lines.push("*Preferred Time:* "+payload.time);
+    lines.push("*Treatment / Reason:* "+payload.treatment);
+    if(payload.message) lines.push("*Message:* "+payload.message);
+    lines.push("");
+    lines.push("Sent via the appointment form on the website.");
+    return lines.join("\n");
+  }
+  function sendToWhatsApp(payload){
+    var url = "https://wa.me/"+WHATSAPP_NUMBER+"?text="+encodeURIComponent(buildWhatsAppMessage(payload));
+    window.open(url, "_blank", "noopener");
+  }
+
   form.addEventListener("submit", function(e){
     e.preventDefault();
     badState.classList.remove("is-on");
@@ -189,16 +220,19 @@
       return;
     }
 
-    btn.disabled = true;
-    label.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending…';
-
     var payload = Object.fromEntries(new FormData(form).entries());
     payload.submittedAt = new Date().toISOString();
+
+    /* open WhatsApp synchronously, in the same click, so browsers don't block the popup */
+    sendToWhatsApp(payload);
+
+    btn.disabled = true;
+    label.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending…';
 
     var request = FORM_ENDPOINT
       ? fetch(FORM_ENDPOINT, {method:"POST", headers:{"Content-Type":"application/json", "Accept":"application/json"}, body:JSON.stringify(payload)})
           .then(function(r){ if(!r.ok) throw new Error("Bad response"); })
-      : (console.warn("[Appointment form] DEMO MODE — set FORM_ENDPOINT in index.html before going live. Nothing was sent."), new Promise(function(res){setTimeout(res,700)}));
+      : (console.warn("[Appointment form] FORM_ENDPOINT is not set — request was sent to WhatsApp only, no copy was stored on a server."), new Promise(function(res){setTimeout(res,700)}));
 
     request.then(function(){
       form.style.display = "none";
