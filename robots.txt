@@ -1,0 +1,6 @@
+# robots.txt — The Family Dental Okhla
+User-agent: *
+Allow: /
+
+# Replace example.com with your real domain
+Sitemap: https://example.com/sitemap.xml
